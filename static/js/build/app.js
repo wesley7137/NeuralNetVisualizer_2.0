@@ -1,34 +1,81 @@
 
 
 
-
-async function fetchNetworkState() {
+// Function to fetch the state of the model
+async function fetchModelState() {
     try {
-        const response = await fetch(' http://localhost:5001/model_state');
+        const response = await fetch('http://127.0.0.1:5001/get_model_state');
         if (!response.ok) {
             throw new Error(`Network response was not ok: ${response.status}`);
         }
         return await response.json();
     } catch (error) {
-        console.error('Error fetching network state:', error);
+        console.error('Error fetching model state:', error);
         return null; // Or appropriate error handling
     }
 }
 
-
-async function fetchNetworkState() {
+// Function to fetch the evaluation of the model
+async function fetchEvaluateModel() {
     try {
-        // Update the endpoint to match the Flask route
-        const response = await fetch('http://localhost:5000/evaluate_model');
+        const response = await fetch('http://127.0.0.1:5000/evaluate_model');
         if (!response.ok) {
             throw new Error(`Network response was not ok: ${response.statusText}`);
         }
         return await response.json();
     } catch (error) {
-        console.error('Error fetching network state:', error);
+        console.error('Error fetching evaluation:', error);
         return null; // Or appropriate error handling
     }
 }
+
+
+// This function should be called whenever new data is fetched from the backend
+function updateVisualizer(networkState) {
+    // Assuming `networkState` contains arrays of neuron_states and other necessary data
+    // Update neurons
+    networkState.neuron_states.forEach((neuronState, index) => {
+        let neuron = scene.getObjectByName("neuron_" + index);
+        if (neuron) {
+            // Update neuron properties based on the state
+            // For example, change the color if it's fired
+            neuron.material.color.setHex(neuronState.fired ? 0xff0000 : 0x00ff00);
+            // Adjust the intensity or other properties as needed
+            neuron.material.opacity = neuronState.fired ? 1.0 : 0.5;
+            // Update size or other visual attributes
+            neuron.scale.setScalar(neuronState.fired ? 1.2 : 1.0);
+        }
+    });
+
+
+}
+
+// Encapsulate the interval in a function
+function startFetchingNetworkState() {
+    setInterval(async () => {
+        const networkState = await fetchModelState();
+        if(networkState) {
+            updateVisualizer(networkState); // Assuming a function updateVisualizer exists to update the visualizer
+        }
+    }, 1000); // Fetching every 1000 milliseconds (1 second)
+}
+
+
+
+
+// The following function encapsulates the fetch and update process
+
+async function startFetchingNetworkState() {
+    setInterval(async () => {
+        const networkState = await fetchNetworkState();
+        if (networkState) {
+            updateVisualizer(networkState);
+        }
+    }, 1000); // Fetching every 1000 milliseconds (1 second)
+}
+
+// Call this function once to start the periodic fetching and updating
+startFetchingNetworkState();
 
 
 
@@ -537,6 +584,16 @@ NeuralNetwork.prototype.update = async function(deltaTime) {
             this.neuronAttributes.size.value[i] = neuron.fired ? 1.5 : 1.0; // Example: change size
         }
 
+
+        // Additional logic to handle signals based on updated neurons
+        networkState.neuron_states.forEach((state, index) => {
+            let neuron = this.components.neurons[index];
+            if (neuron.fired && !neuron.receivedSignal) {
+                neuron.receivedSignal = true;
+                let signals = neuron.createSignal(this.particlePool, this.settings.signalMinSpeed, this.settings.signalMaxSpeed);
+                signals.forEach(signal => this.components.allSignals.push(signal));
+            }
+        });
         // Update axons (connections) based on networkState
         this.updateAxons(networkState.connections);
 
